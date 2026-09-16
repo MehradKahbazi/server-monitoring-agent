@@ -20,10 +20,6 @@ export class TelegramService {
       polling: true,
     });
 
-    this.bot.on("message", (message) => {
-      console.log("Telegram message received:", message.chat.id, message.text);
-    });
-
     this.registerCommands();
 
     this.bot.on("polling_error", (error) => {
@@ -52,19 +48,15 @@ export class TelegramService {
         try {
           const command = message.text?.split(" ")[0];
 
-          console.log("COMMAND:", command);
-
           switch (command) {
             case "/status":
               console.log("Collecting system metrics...");
 
               const metrics = await collectSystemMetrics(config.filesystems);
 
-              console.log("Metrics collected:", metrics);
 
               await this.sendMessage(formatStatus(metrics));
 
-              console.log("Status message sent");
               break;
 
             case "/services":
