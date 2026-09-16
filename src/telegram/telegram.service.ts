@@ -20,6 +20,10 @@ export class TelegramService {
       polling: true,
     });
 
+    this.bot.on("message", (message) => {
+      console.log("Telegram message received:", message.chat.id, message.text);
+    });
+
     this.registerCommands();
 
     this.bot.on("polling_error", (error) => {
