@@ -1,0 +1,296 @@
+import TelegramBot from "node-telegram-bot-api";
+
+import { config } from "../config/config.js";
+
+import { collectHealth } from "../health/health.service.js";
+
+import { collectSystemMetrics } from "../metrics/system.metrics.js";
+
+import type { HealthSnapshot, SystemMetrics } from "../types/metrics.js";
+
+import { bytes, duration, percent } from "../utils/format.js";
+
+export class TelegramService {
+  private readonly bot: TelegramBot;
+
+  private readonly chatId = config.telegram.chatId;
+
+  constructor() {
+    this.bot = new TelegramBot(config.telegram.token, {
+      polling: true,
+    });
+
+    this.registerCommands();
+
+    this.bot.on("polling_error", (error) => {
+      console.error("Telegram polling error:", error.message);
+    });
+  }
+
+  private registerCommands(): void {
+    this.bot.onText(/^\/(status|services|disk|help)$/, async (message) => {
+      if (String(message.chat.id) !== this.chatId) {
+        return;
+      }
+
+      try {
+        const command = message.text?.split(" ")[0];
+
+        switch (command) {
+          case "/status":
+            await this.sendMessage(
+              formatStatus(await collectSystemMetrics(config.filesystems)),
+            );
+            break;
+
+          case "/services":
+            await this.sendMessage(formatHealth(await collectHealth()));
+            break;
+
+          case "/disk":
+            await this.sendMessage(
+              formatDisk(await collectSystemMetrics(config.filesystems)),
+            );
+            break;
+
+          case "/help":
+          default:
+            await this.sendMessage(
+              [
+                "🤖 <b>SERVER MONITOR</b>",
+                "",
+                "/status — server status",
+                "/services — service health",
+                "/disk — disk usage",
+                "/help — show commands",
+              ].join("\n"),
+            );
+            break;
+        }
+      } catch (error) {
+        console.error("Telegram command error:", error);
+
+        await this.sendMessage("❌ Failed to collect the requested status.");
+      }
+    });
+  }
+
+  async sendMessage(text: string): Promise<void> {
+    await this.bot.sendMessage(this.chatId, text, {
+      parse_mode: "HTML",
+
+      disable_web_page_preview: true,
+    });
+  }
+
+  async sendAlert(
+    metrics: SystemMetrics,
+
+    reasons: string[],
+
+    health: HealthSnapshot,
+  ): Promise<void> {
+    await this.sendMessage(formatAlert(metrics, reasons, health));
+  }
+
+  async sendRecovery(
+    metrics: SystemMetrics,
+
+    recovered: string[],
+  ): Promise<void> {
+    await this.sendMessage(
+      [
+        "✅ <b>SERVER RECOVERED</b>",
+        "",
+        `<b>Host:</b> ${escapeHtml(metrics.hostname)}`,
+        `<b>Recovered:</b> ${recovered.join(", ")}`,
+        `<b>CPU:</b> ${percent(metrics.cpu.usagePercent)}`,
+        `<b>RAM:</b> ${percent(metrics.memory.usagePercent)}`,
+        `<b>Time:</b> ${metrics.collectedAt.toISOString()}`,
+      ].join("\n"),
+    );
+  }
+}
+
+function formatStatus(metrics: SystemMetrics): string {
+  return [
+    `🖥 <b>${escapeHtml(metrics.hostname)}</b>`,
+
+    `⏱ Uptime: ${duration(metrics.uptimeSeconds)}`,
+
+    "",
+
+    "🔥 <b>CPU</b>",
+
+    `Usage: <b>${percent(metrics.cpu.usagePercent)}</b>`,
+
+    `Load: ${metrics.cpu.load.map((value) => value.toFixed(2)).join(" / ")}`,
+
+    `Cores: ${metrics.cpu.cores}`,
+
+    `Temperature: ${
+      metrics.cpu.temperatureC === null
+        ? "N/A"
+        : `${metrics.cpu.temperatureC.toFixed(1)}°C`
+    }`,
+
+    "",
+
+    "🧠 <b>RAM</b>",
+
+    `Usage: <b>${percent(metrics.memory.usagePercent)}</b>`,
+
+    `${bytes(metrics.memory.usedBytes)} / ${bytes(metrics.memory.totalBytes)}`,
+
+    `Available: ${bytes(metrics.memory.availableBytes)}`,
+
+    "",
+
+    "🔄 <b>SWAP</b>",
+
+    `Usage: <b>${percent(metrics.memory.swapUsagePercent)}</b>`,
+
+    `${bytes(metrics.memory.swapUsedBytes)} / ${bytes(metrics.memory.swapTotalBytes)}`,
+
+    "",
+
+    `⚙️ Processes: ${metrics.processCount}`,
+
+    `⏰ ${metrics.collectedAt.toISOString()}`,
+  ].join("\n");
+}
+
+function formatDisk(metrics: SystemMetrics): string {
+  const lines = ["💾 <b>DISK STATUS</b>", ""];
+
+  if (metrics.disks.length === 0) {
+    lines.push("No monitored filesystems found.");
+
+    return lines.join("\n");
+  }
+
+  for (const disk of metrics.disks) {
+    lines.push(
+      `<b>${escapeHtml(disk.mount)}</b>: ${percent(disk.usagePercent)}`,
+
+      `${bytes(disk.usedBytes)} / ${bytes(disk.totalBytes)}`,
+
+      `Available: ${bytes(disk.availableBytes)}`,
+
+      "",
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function formatHealth(health: HealthSnapshot): string {
+  const lines = ["⚙️ <b>SERVICE HEALTH</b>", ""];
+
+  if (health.services.length === 0) {
+    lines.push("No services configured.");
+  } else {
+    for (const service of health.services) {
+      lines.push(
+        `${service.active ? "✅" : "❌"} ${escapeHtml(service.name)} — ${escapeHtml(service.state)}`,
+      );
+    }
+  }
+
+  if (health.endpoints.length > 0) {
+    lines.push("", "🌐 <b>ENDPOINTS</b>");
+
+    for (const endpoint of health.endpoints) {
+      const detail = endpoint.statusCode ?? endpoint.error ?? "failed";
+
+      const response =
+        endpoint.responseTimeMs !== null
+          ? ` (${endpoint.responseTimeMs}ms)`
+          : "";
+
+      lines.push(
+        `${endpoint.healthy ? "✅" : "❌"} ${escapeHtml(endpoint.name)} — ${escapeHtml(String(detail))}${response}`,
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function formatAlert(
+  metrics: SystemMetrics,
+
+  reasons: string[],
+
+  health: HealthSnapshot,
+): string {
+  const lines: string[] = [
+    "🚨 <b>SERVER RESOURCE ALERT</b>",
+    "",
+    `<b>Host:</b> ${escapeHtml(metrics.hostname)}`,
+    `<b>Time:</b> ${metrics.collectedAt.toISOString()}`,
+    "",
+    "🔥 <b>CPU</b>",
+    `Usage: <b>${percent(metrics.cpu.usagePercent)}</b>`,
+    `Load: ${metrics.cpu.load.map((value) => value.toFixed(2)).join(" / ")}`,
+    `Cores: ${metrics.cpu.cores}`,
+    `Temperature: ${
+      metrics.cpu.temperatureC === null
+        ? "N/A"
+        : `${metrics.cpu.temperatureC.toFixed(1)}°C`
+    }`,
+    "",
+    "🧠 <b>MEMORY</b>",
+    `Used: ${bytes(metrics.memory.usedBytes)} / ${bytes(metrics.memory.totalBytes)}`,
+    `Usage: <b>${percent(metrics.memory.usagePercent)}</b>`,
+    `Available: ${bytes(metrics.memory.availableBytes)}`,
+    "",
+    "🔄 <b>SWAP</b>",
+    `Used: ${bytes(metrics.memory.swapUsedBytes)} / ${bytes(metrics.memory.swapTotalBytes)}`,
+    `Usage: ${percent(metrics.memory.swapUsagePercent)}`,
+    "",
+    "💾 <b>DISK</b>",
+  ];
+
+  for (const disk of metrics.disks) {
+    lines.push(
+      `${escapeHtml(disk.mount)}: <b>${percent(disk.usagePercent)}</b>`,
+      `${bytes(disk.usedBytes)} / ${bytes(disk.totalBytes)}`,
+    );
+  }
+
+  lines.push("", "⚙️ <b>SERVICES</b>");
+
+  if (health.services.length === 0) {
+    lines.push("No service checks configured.");
+  } else {
+    for (const service of health.services) {
+      lines.push(`${service.active ? "✅" : "❌"} ${escapeHtml(service.name)}`);
+    }
+  }
+
+  if (health.endpoints.length > 0) {
+    lines.push("", "🌐 <b>ENDPOINTS</b>");
+
+    for (const endpoint of health.endpoints) {
+      lines.push(
+        `${endpoint.healthy ? "✅" : "❌"} ${escapeHtml(endpoint.name)}`,
+      );
+    }
+  }
+
+  lines.push("", "⚠️ <b>REASONS</b>");
+
+  for (const reason of reasons) {
+    lines.push(`• ${escapeHtml(reason)}`);
+  }
+
+  return lines.join("\n");
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
