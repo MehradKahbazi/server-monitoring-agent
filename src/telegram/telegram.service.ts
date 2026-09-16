@@ -32,51 +32,72 @@ export class TelegramService {
   }
 
   private registerCommands(): void {
-    this.bot.onText(/^\/(status|services|disk|help)$/, async (message) => {
-      if (String(message.chat.id) !== this.chatId) {
-        return;
-      }
+    this.bot.onText(
+      /^\/(status|services|disk|help)(?:@\w+)?$/,
+      async (message) => {
+        console.log("COMMAND HANDLER:", message.text);
 
-      try {
-        const command = message.text?.split(" ")[0];
-
-        switch (command) {
-          case "/status":
-            await this.sendMessage(
-              formatStatus(await collectSystemMetrics(config.filesystems)),
-            );
-            break;
-
-          case "/services":
-            await this.sendMessage(formatHealth(await collectHealth()));
-            break;
-
-          case "/disk":
-            await this.sendMessage(
-              formatDisk(await collectSystemMetrics(config.filesystems)),
-            );
-            break;
-
-          case "/help":
-          default:
-            await this.sendMessage(
-              [
-                "🤖 <b>SERVER MONITOR</b>",
-                "",
-                "/status — server status",
-                "/services — service health",
-                "/disk — disk usage",
-                "/help — show commands",
-              ].join("\n"),
-            );
-            break;
+        if (String(message.chat.id) !== this.chatId) {
+          console.log(
+            "Unauthorized chat:",
+            message.chat.id,
+            "expected:",
+            this.chatId,
+          );
+          return;
         }
-      } catch (error) {
-        console.error("Telegram command error:", error);
 
-        await this.sendMessage("❌ Failed to collect the requested status.");
-      }
-    });
+        console.log("CHAT AUTHORIZED");
+
+        try {
+          const command = message.text?.split(" ")[0];
+
+          console.log("COMMAND:", command);
+
+          switch (command) {
+            case "/status":
+              console.log("Collecting system metrics...");
+
+              const metrics = await collectSystemMetrics(config.filesystems);
+
+              console.log("Metrics collected:", metrics);
+
+              await this.sendMessage(formatStatus(metrics));
+
+              console.log("Status message sent");
+              break;
+
+            case "/services":
+              await this.sendMessage(formatHealth(await collectHealth()));
+              break;
+
+            case "/disk":
+              await this.sendMessage(
+                formatDisk(await collectSystemMetrics(config.filesystems)),
+              );
+              break;
+
+            case "/help":
+            default:
+              await this.sendMessage(
+                [
+                  "🤖 <b>SERVER MONITOR</b>",
+                  "",
+                  "/status — server status",
+                  "/services — service health",
+                  "/disk — disk usage",
+                  "/help — show commands",
+                ].join("\n"),
+              );
+              break;
+          }
+        } catch (error) {
+          console.error("Telegram command error:", error);
+
+          await this.sendMessage("❌ Failed to collect the requested status.");
+        }
+      },
+    );
   }
 
   async sendMessage(text: string): Promise<void> {
