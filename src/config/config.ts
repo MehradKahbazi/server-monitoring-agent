@@ -106,7 +106,7 @@ export const config = {
       .map((value) => value.trim())
       .filter(Boolean),
 
-    endpoints,
+    endpointConfigs: endpoints,
   },
 
   logLevel: process.env.LOG_LEVEL ?? "info",
