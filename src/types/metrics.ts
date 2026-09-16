@@ -62,10 +62,18 @@ export interface EndpointStatus {
   error?: string;
 }
 
+export interface TcpStatus {
+  host: string;
+  port: number;
+  healthy: boolean;
+  responseTimeMs: number | null;
+  error?: string;
+}
+
 export interface HealthSnapshot {
   services: ServiceStatus[];
-
   endpoints: EndpointStatus[];
+  mysql: TcpStatus | null;
 }
 
 export type AlertMetric =

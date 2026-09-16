@@ -54,7 +54,6 @@ export class TelegramService {
 
               const metrics = await collectSystemMetrics(config.filesystems);
 
-
               await this.sendMessage(formatStatus(metrics));
 
               break;
@@ -202,33 +201,58 @@ function formatDisk(metrics: SystemMetrics): string {
 }
 
 function formatHealth(health: HealthSnapshot): string {
-  const lines = ["⚙️ <b>SERVICE HEALTH</b>", ""];
+  const lines: string[] = ["🏥 <b>Service Health</b>", ""];
 
-  if (health.services.length === 0) {
-    lines.push("No services configured.");
-  } else {
+  if (health.services.length > 0) {
+    lines.push("⚙️ <b>System Services</b>");
+
     for (const service of health.services) {
       lines.push(
-        `${service.active ? "✅" : "❌"} ${escapeHtml(service.name)} — ${escapeHtml(service.state)}`,
+        `${service.active ? "🟢" : "🔴"} <b>${escapeHtml(service.name)}</b> — ${escapeHtml(service.state)}`,
       );
     }
+
+    lines.push("");
+  }
+
+  if (health.mysql) {
+    const mysql = health.mysql;
+
+    lines.push("🗄️ <b>MySQL</b>");
+
+    if (mysql.healthy) {
+      lines.push(
+        `🟢 TCP ${mysql.host}:${mysql.port} — reachable (${mysql.responseTimeMs} ms)`,
+      );
+    } else {
+      lines.push(`🔴 TCP ${mysql.host}:${mysql.port} — unreachable`);
+
+      if (mysql.error) {
+        lines.push(`   Error: ${escapeHtml(mysql.error)}`);
+      }
+    }
+
+    lines.push("");
   }
 
   if (health.endpoints.length > 0) {
-    lines.push("", "🌐 <b>ENDPOINTS</b>");
+    lines.push("🌐 <b>HTTP Endpoints</b>");
 
     for (const endpoint of health.endpoints) {
-      const detail = endpoint.statusCode ?? endpoint.error ?? "failed";
+      if (endpoint.healthy) {
+        lines.push(
+          `🟢 <b>${escapeHtml(endpoint.name)}</b> — ${endpoint.statusCode} (${endpoint.responseTimeMs} ms)`,
+        );
+      } else {
+        lines.push(`🔴 <b>${escapeHtml(endpoint.name)}</b> — unavailable`);
 
-      const response =
-        endpoint.responseTimeMs !== null
-          ? ` (${endpoint.responseTimeMs}ms)`
-          : "";
-
-      lines.push(
-        `${endpoint.healthy ? "✅" : "❌"} ${escapeHtml(endpoint.name)} — ${escapeHtml(String(detail))}${response}`,
-      );
+        if (endpoint.error) {
+          lines.push(`   Error: ${escapeHtml(endpoint.error)}`);
+        }
+      }
     }
+
+    lines.push("");
   }
 
   return lines.join("\n");
