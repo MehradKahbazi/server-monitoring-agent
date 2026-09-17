@@ -2,6 +2,7 @@ import {
   fileExists,
   parseKeyValueFile,
   readNumberFile,
+  readTextFile,
 } from "./cgroup.utils.js";
 
 import type { RuntimeContext } from "./runtime.types.js";
