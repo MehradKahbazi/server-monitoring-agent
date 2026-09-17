@@ -2,13 +2,6 @@
   "name": "server-monitor",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
 
-  "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:1": {
-      "version": "latest",
-      "moby": true
-    }
-  },
-
   "customizations": {
     "vscode": {
       "extensions": [
