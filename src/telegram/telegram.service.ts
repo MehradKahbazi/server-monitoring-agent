@@ -318,7 +318,7 @@ function formatAlert(
     lines.push("No service checks configured.");
   } else {
     for (const service of health.services) {
-      lines.push(`${service.active ? "✅" : "❌"} ${escapeHtml(service.name)}`);
+      lines.push(`${service.healthy ? "✅" : "❌"} ${escapeHtml(service.name)}`);
     }
   }
 
