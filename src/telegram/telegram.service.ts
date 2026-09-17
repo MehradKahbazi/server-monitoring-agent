@@ -204,34 +204,44 @@ function formatHealth(health: HealthSnapshot): string {
   const lines: string[] = ["🏥 <b>Service Health</b>", ""];
 
   if (health.services.length > 0) {
-    lines.push("⚙️ <b>System Services</b>");
+    lines.push("⚙️ <b>Services</b>");
 
     for (const service of health.services) {
-      lines.push(
-        `${service.active ? "🟢" : "🔴"} <b>${escapeHtml(service.name)}</b> — ${escapeHtml(service.state)}`,
-      );
-    }
+      if (service.type === "systemd") {
+        lines.push(
+          `${service.healthy ? "🟢" : "🔴"} ` +
+            `<b>${escapeHtml(service.name)}</b>` +
+            ` — ${escapeHtml(service.systemdState ?? "unknown")}`,
+        );
 
-    lines.push("");
-  }
+        continue;
+      }
 
-  if (health.mysql) {
-    const mysql = health.mysql;
+      if (service.type === "tcp") {
+        const address = `${service.host}:${service.port}`;
 
-    lines.push("🗄️ <b>MySQL</b>");
+        if (service.healthy) {
+          lines.push(
+            `🟢 <b>${escapeHtml(service.name)}</b>` +
+              ` — ${escapeHtml(address)}` +
+              ` (${service.responseTimeMs ?? 0} ms)`,
+          );
+        } else {
+          lines.push(
+            `🔴 <b>${escapeHtml(service.name)}</b>` +
+              ` — ${escapeHtml(address)}`,
+          );
 
-    if (mysql.healthy) {
-      lines.push(
-        `🟢 TCP ${mysql.host}:${mysql.port} — reachable (${mysql.responseTimeMs} ms)`,
-      );
-    } else {
-      lines.push(`🔴 TCP ${mysql.host}:${mysql.port} — unreachable`);
-
-      if (mysql.error) {
-        lines.push(`   Error: ${escapeHtml(mysql.error)}`);
+          if (service.error) {
+            lines.push(`   ${escapeHtml(service.error)}`);
+          }
+        }
       }
     }
 
+    lines.push("");
+  } else {
+    lines.push("ℹ️ No services configured.");
     lines.push("");
   }
 
@@ -241,13 +251,15 @@ function formatHealth(health: HealthSnapshot): string {
     for (const endpoint of health.endpoints) {
       if (endpoint.healthy) {
         lines.push(
-          `🟢 <b>${escapeHtml(endpoint.name)}</b> — ${endpoint.statusCode} (${endpoint.responseTimeMs} ms)`,
+          `🟢 <b>${escapeHtml(endpoint.name)}</b>` +
+            ` — ${endpoint.statusCode}` +
+            ` (${endpoint.responseTimeMs} ms)`,
         );
       } else {
-        lines.push(`🔴 <b>${escapeHtml(endpoint.name)}</b> — unavailable`);
+        lines.push(`🔴 <b>${escapeHtml(endpoint.name)}</b>` + ` — unavailable`);
 
         if (endpoint.error) {
-          lines.push(`   Error: ${escapeHtml(endpoint.error)}`);
+          lines.push(`   ${escapeHtml(endpoint.error)}`);
         }
       }
     }

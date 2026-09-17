@@ -23,11 +23,15 @@ export async function checkTcp(
 
     let settled = false;
 
-    const finish = (result: TcpStatus) => {
-      if (settled) return;
+    const finish = (result: TcpStatus): void => {
+      if (settled) {
+        return;
+      }
 
       settled = true;
+
       socket.destroy();
+
       resolve(result);
     };
 
