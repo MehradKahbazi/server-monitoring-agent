@@ -1,3 +1,7 @@
+import { config } from "../config/config.js";
+
+import type { ServiceConfig } from "../config/config.js";
+
 import type { ServiceType } from "../types/metrics.js";
 
 export interface MonitoredService {
@@ -8,9 +12,11 @@ export interface MonitoredService {
 
   host?: string;
   port?: number;
+
+  url?: string;
 }
 
-const serviceDefinitions: Record<string, MonitoredService> = {
+const defaultServiceDefinitions: Record<string, MonitoredService> = {
   nginx: {
     name: "nginx",
     type: "systemd",
@@ -93,12 +99,31 @@ const serviceDefinitions: Record<string, MonitoredService> = {
   },
 };
 
+function fromConfig(service: ServiceConfig): MonitoredService {
+  return {
+    name: service.name,
+    type: service.type,
+    ...(service.systemdName ? { systemdName: service.systemdName } : {}),
+    ...(service.host ? { host: service.host } : {}),
+    ...(service.port !== undefined ? { port: service.port } : {}),
+    ...(service.url ? { url: service.url } : {}),
+  };
+}
+
 export function getServiceDefinition(
   serviceName: string,
 ): MonitoredService | null {
   const normalized = serviceName.trim().toLowerCase();
 
-  return serviceDefinitions[normalized] ?? null;
+  const configured = config.checks.servicesConfig.find(
+    (service) => service.name.toLowerCase() === normalized,
+  );
+
+  if (configured) {
+    return fromConfig(configured);
+  }
+
+  return defaultServiceDefinitions[normalized] ?? null;
 }
 
 export function getServiceDefinitions(

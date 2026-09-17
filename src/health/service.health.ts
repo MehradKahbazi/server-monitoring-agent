@@ -81,6 +81,10 @@ export async function checkService(
   if (service.type === "tcp") {
     return checkTcpService(service);
   }
+  
+  if (service.type === "http") {
+    return checkHttpService(service);
+  }
 
   return {
     name: service.name,
@@ -88,4 +92,45 @@ export async function checkService(
     healthy: false,
     error: "Unsupported service type",
   };
+}
+async function checkHttpService(
+  service: MonitoredService,
+): Promise<ServiceStatus> {
+  if (!service.url) {
+    return {
+      name: service.name,
+      type: "http",
+      healthy: false,
+      error: "HTTP URL is not configured",
+    };
+  }
+
+  const started = performance.now();
+
+  try {
+    const response = await fetch(service.url, {
+      method: "GET",
+      signal: AbortSignal.timeout(5_000),
+      redirect: "manual",
+    });
+
+    return {
+      name: service.name,
+      type: "http",
+      healthy: response.status >= 200 && response.status < 500,
+      url: service.url,
+      statusCode: response.status,
+      responseTimeMs: Math.round(performance.now() - started),
+    };
+  } catch (error) {
+    return {
+      name: service.name,
+      type: "http",
+      healthy: false,
+      url: service.url,
+      statusCode: null,
+      responseTimeMs: Math.round(performance.now() - started),
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }

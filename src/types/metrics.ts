@@ -34,7 +34,7 @@ export interface SystemMetrics {
   collectedAt: Date;
 }
 
-export type ServiceType = "systemd" | "tcp";
+export type ServiceType = "systemd" | "tcp" | "http";
 
 export interface ServiceStatus {
   name: string;
@@ -45,6 +45,10 @@ export interface ServiceStatus {
 
   host?: string;
   port?: number;
+
+  url?: string;
+  statusCode?: number | null;
+
   responseTimeMs?: number | null;
 
   error?: string;
