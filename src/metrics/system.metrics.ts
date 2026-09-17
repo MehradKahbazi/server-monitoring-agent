@@ -4,26 +4,21 @@ import si from "systeminformation";
 
 import { getEnvironment } from "../environment/environment.service.js";
 
+import { collectRuntimeMetrics } from "../runtime/runtime.service.js";
+
 import type { DiskMetric, SystemMetrics } from "../types/metrics.js";
 
 export async function collectSystemMetrics(
   filesystems: readonly string[],
 ): Promise<SystemMetrics> {
-  const [
-    cpuLoad,
-    cpuTemperature,
-    memory,
-    filesystemSize,
-    processes,
-    systemTime,
-  ] = await Promise.all([
-    si.currentLoad(),
-    si.cpuTemperature(),
-    si.mem(),
-    si.fsSize(),
-    si.processes(),
-    si.time(),
-  ]);
+  const [memory, cpuTemperature, filesystemSize, systemTime, runtime] =
+    await Promise.all([
+      si.mem(),
+      si.cpuTemperature(),
+      si.fsSize(),
+      si.time(),
+      collectRuntimeMetrics(),
+    ]);
 
   const load = os.loadavg() as [number, number, number];
 
@@ -38,22 +33,31 @@ export async function collectSystemMetrics(
       usagePercent: disk.use,
     }));
 
-  const memoryUsage = memory.total > 0 ? (memory.used / memory.total) * 100 : 0;
+  const environment = getEnvironment();
+
+  const runtimeMemory = runtime.metrics;
+
+  const memoryUsage =
+    runtimeMemory.memoryUsageBytes !== null &&
+    runtimeMemory.memoryLimitBytes !== null &&
+    runtimeMemory.memoryLimitBytes > 0
+      ? (runtimeMemory.memoryUsageBytes / runtimeMemory.memoryLimitBytes) * 100
+      : 0;
 
   const swapUsage =
     memory.swaptotal > 0 ? (memory.swapused / memory.swaptotal) * 100 : 0;
 
   return {
-    hostname: os.hostname(),
+    hostname: environment.hostname,
 
     uptimeSeconds: systemTime.uptime,
 
-    processCount: processes.all,
+    processCount: runtimeMemory.processCount ?? 0,
 
-    environment: getEnvironment(),
+    environment,
 
     cpu: {
-      usagePercent: cpuLoad.currentLoad,
+      usagePercent: runtimeMemory.cpuUsagePercent ?? 0,
 
       load,
 
@@ -66,11 +70,18 @@ export async function collectSystemMetrics(
     },
 
     memory: {
-      totalBytes: memory.total,
+      totalBytes: runtimeMemory.memoryLimitBytes ?? memory.total,
 
-      usedBytes: memory.used,
+      usedBytes: runtimeMemory.memoryUsageBytes ?? memory.used,
 
-      availableBytes: memory.available,
+      availableBytes:
+        runtimeMemory.memoryLimitBytes !== null &&
+        runtimeMemory.memoryUsageBytes !== null
+          ? Math.max(
+              0,
+              runtimeMemory.memoryLimitBytes - runtimeMemory.memoryUsageBytes,
+            )
+          : memory.available,
 
       usagePercent: memoryUsage,
 
