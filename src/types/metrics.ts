@@ -1,3 +1,5 @@
+import type { EnvironmentContext } from "../environment/environment.types.js";
+
 export interface CpuMetrics {
   usagePercent: number;
   load: [number, number, number];
@@ -28,9 +30,13 @@ export interface SystemMetrics {
   hostname: string;
   uptimeSeconds: number;
   processCount: number;
+
+  environment: EnvironmentContext;
+
   cpu: CpuMetrics;
   memory: MemoryMetrics;
   disks: DiskMetric[];
+
   collectedAt: Date;
 }
 

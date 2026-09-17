@@ -2,6 +2,8 @@ import os from "node:os";
 
 import si from "systeminformation";
 
+import { getEnvironment } from "../environment/environment.service.js";
+
 import type { DiskMetric, SystemMetrics } from "../types/metrics.js";
 
 export async function collectSystemMetrics(
@@ -16,15 +18,10 @@ export async function collectSystemMetrics(
     systemTime,
   ] = await Promise.all([
     si.currentLoad(),
-
     si.cpuTemperature(),
-
     si.mem(),
-
     si.fsSize(),
-
     si.processes(),
-
     si.time(),
   ]);
 
@@ -34,15 +31,10 @@ export async function collectSystemMetrics(
     .filter((disk) => filesystems.includes(disk.mount))
     .map((disk) => ({
       filesystem: disk.fs,
-
       mount: disk.mount,
-
       totalBytes: disk.size,
-
       usedBytes: disk.used,
-
       availableBytes: disk.available,
-
       usagePercent: disk.use,
     }));
 
@@ -57,6 +49,8 @@ export async function collectSystemMetrics(
     uptimeSeconds: systemTime.uptime,
 
     processCount: processes.all,
+
+    environment: getEnvironment(),
 
     cpu: {
       usagePercent: cpuLoad.currentLoad,
