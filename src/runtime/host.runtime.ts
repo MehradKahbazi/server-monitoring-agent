@@ -17,7 +17,10 @@ export async function collectHostRuntime(): Promise<RuntimeContext> {
 
       cpuLimitCores: null,
 
-      memoryUsageBytes: Number.isFinite(memory.used) ? memory.used : null,
+      memoryUsageBytes:
+        Number.isFinite(memory.total) && Number.isFinite(memory.available)
+          ? Math.max(0, memory.total - memory.available)
+          : null,
 
       memoryLimitBytes: Number.isFinite(memory.total) ? memory.total : null,
 
