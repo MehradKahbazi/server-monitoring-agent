@@ -179,7 +179,11 @@ function formatStatus(metrics: SystemMetrics): string {
 
     `Load: ${metrics.cpu.load.map((value) => value.toFixed(2)).join(" / ")}`,
 
-    `Cores: ${metrics.cpu.cores}`,
+    `Host Cores: ${metrics.cpu.cores}${
+      metrics.cpu.limitCores !== null
+        ? `\nContainer Limit: ${metrics.cpu.limitCores.toFixed(2)}`
+        : ""
+    }`,
 
     `Temperature: ${
       metrics.cpu.temperatureC === null
@@ -327,7 +331,11 @@ function formatAlert(
     "🔥 <b>CPU</b>",
     `Usage: <b>${percent(metrics.cpu.usagePercent)}</b>`,
     `Load: ${metrics.cpu.load.map((value) => value.toFixed(2)).join(" / ")}`,
-    `Cores: ${metrics.cpu.cores}`,
+    `Host Cores: ${metrics.cpu.cores}${
+      metrics.cpu.limitCores !== null
+        ? `\nContainer Limit: ${metrics.cpu.limitCores.toFixed(2)}`
+        : ""
+    }`,
     `Temperature: ${
       metrics.cpu.temperatureC === null
         ? "N/A"

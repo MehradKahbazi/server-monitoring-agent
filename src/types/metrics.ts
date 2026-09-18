@@ -4,6 +4,7 @@ export interface CpuMetrics {
   usagePercent: number;
   load: [number, number, number];
   cores: number;
+  limitCores: number | null;
   temperatureC: number | null;
 }
 

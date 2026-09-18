@@ -23,8 +23,10 @@ export async function collectSystemMetrics(
   const load = os.loadavg() as [number, number, number];
 
   const disks: DiskMetric[] = filesystemSize
-    .filter((disk) => filesystems.includes(disk.mount))
-    .map((disk) => ({
+    .filter((disk: si.Systeminformation.FsSizeData) =>
+      filesystems.includes(disk.mount),
+    )
+    .map((disk: si.Systeminformation.FsSizeData) => ({
       filesystem: disk.fs,
       mount: disk.mount,
       totalBytes: disk.size,
@@ -35,14 +37,17 @@ export async function collectSystemMetrics(
 
   const environment = getEnvironment();
 
-  const runtimeMemory = runtime.metrics;
+  const runtimeMetrics = runtime.metrics;
 
   const memoryUsage =
-    runtimeMemory.memoryUsageBytes !== null &&
-    runtimeMemory.memoryLimitBytes !== null &&
-    runtimeMemory.memoryLimitBytes > 0
-      ? (runtimeMemory.memoryUsageBytes / runtimeMemory.memoryLimitBytes) * 100
-      : 0;
+    runtimeMetrics.memoryUsageBytes !== null &&
+    runtimeMetrics.memoryLimitBytes !== null &&
+    runtimeMetrics.memoryLimitBytes > 0
+      ? (runtimeMetrics.memoryUsageBytes / runtimeMetrics.memoryLimitBytes) *
+        100
+      : memory.total > 0
+        ? (memory.used / memory.total) * 100
+        : 0;
 
   const swapUsage =
     memory.swaptotal > 0 ? (memory.swapused / memory.swaptotal) * 100 : 0;
@@ -52,16 +57,18 @@ export async function collectSystemMetrics(
 
     uptimeSeconds: systemTime.uptime,
 
-    processCount: runtimeMemory.processCount ?? 0,
+    processCount: runtimeMetrics.processCount ?? 0,
 
     environment,
 
     cpu: {
-      usagePercent: runtimeMemory.cpuUsagePercent ?? 0,
+      usagePercent: runtimeMetrics.cpuUsagePercent ?? 0,
 
       load,
 
       cores: os.cpus().length,
+
+      limitCores: runtimeMetrics.cpuLimitCores,
 
       temperatureC:
         Number.isFinite(cpuTemperature.main) && cpuTemperature.main > 0
@@ -70,16 +77,16 @@ export async function collectSystemMetrics(
     },
 
     memory: {
-      totalBytes: runtimeMemory.memoryLimitBytes ?? memory.total,
+      totalBytes: runtimeMetrics.memoryLimitBytes ?? memory.total,
 
-      usedBytes: runtimeMemory.memoryUsageBytes ?? memory.used,
+      usedBytes: runtimeMetrics.memoryUsageBytes ?? memory.used,
 
       availableBytes:
-        runtimeMemory.memoryLimitBytes !== null &&
-        runtimeMemory.memoryUsageBytes !== null
+        runtimeMetrics.memoryLimitBytes !== null &&
+        runtimeMetrics.memoryUsageBytes !== null
           ? Math.max(
               0,
-              runtimeMemory.memoryLimitBytes - runtimeMemory.memoryUsageBytes,
+              runtimeMetrics.memoryLimitBytes - runtimeMetrics.memoryUsageBytes,
             )
           : memory.available,
 

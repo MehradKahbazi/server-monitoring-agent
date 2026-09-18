@@ -39,7 +39,7 @@ function readV2Memory(): {
   if (maxRaw !== null && maxRaw !== "max") {
     const parsed = Number(maxRaw);
 
-    if (Number.isFinite(parsed)) {
+    if (Number.isFinite(parsed) && parsed > 0) {
       limit = parsed;
     }
   }
@@ -82,7 +82,61 @@ function readV1CpuUsage(): number | null {
   return nanoseconds / 1_000;
 }
 
-function calculateCpuUsagePercent(usageUsec: number | null): number | null {
+function readV2CpuLimitCores(): number | null {
+  const value = readTextFile("/sys/fs/cgroup/cpu.max");
+
+  console.log("[docker-runtime] cpu.max:", value);
+
+  if (!value) {
+    return null;
+  }
+
+  const parts = value.split(/\s+/);
+
+  if (parts.length < 2) {
+    return null;
+  }
+
+  if (parts[0] === "max") {
+    return null;
+  }
+
+  const quota = Number(parts[0]);
+
+  const period = Number(parts[1]);
+
+  if (
+    !Number.isFinite(quota) ||
+    !Number.isFinite(period) ||
+    quota <= 0 ||
+    period <= 0
+  ) {
+    return null;
+  }
+
+  const limit = quota / period;
+
+  console.log("[docker-runtime] CPU limit cores:", limit);
+
+  return limit;
+}
+
+function readV1CpuLimitCores(): number | null {
+  const quota = readNumberFile("/sys/fs/cgroup/cpu/cpu.cfs_quota_us");
+
+  const period = readNumberFile("/sys/fs/cgroup/cpu/cpu.cfs_period_us");
+
+  if (quota === null || period === null || quota <= 0 || period <= 0) {
+    return null;
+  }
+
+  return quota / period;
+}
+
+function calculateCpuUsagePercent(
+  usageUsec: number | null,
+  cpuLimitCores: number | null,
+): number | null {
   if (usageUsec === null) {
     return null;
   }
@@ -96,6 +150,7 @@ function calculateCpuUsagePercent(usageUsec: number | null): number | null {
 
   if (!previousCpuSample) {
     previousCpuSample = current;
+
     return null;
   }
 
@@ -109,16 +164,14 @@ function calculateCpuUsagePercent(usageUsec: number | null): number | null {
     return null;
   }
 
-  /*
-   * 100% means one fully utilized CPU core.
-   *
-   * Example:
-   * 30 ms CPU time used during a 100 ms interval
-   * = 30% CPU.
-   */
-  const cpuPercent = (usageDelta / (timeDeltaMs * 1_000)) * 100;
+  const usageOfOneCore = usageDelta / (timeDeltaMs * 1_000);
 
-  return Number.isFinite(cpuPercent) ? Math.max(0, cpuPercent) : null;
+  const normalizedUsage =
+    cpuLimitCores !== null && cpuLimitCores > 0
+      ? usageOfOneCore / cpuLimitCores
+      : usageOfOneCore;
+
+  return Math.min(100, Math.max(0, normalizedUsage * 100));
 }
 
 function readV2ProcessCount(): number | null {
@@ -136,6 +189,7 @@ export async function collectDockerRuntime(): Promise<RuntimeContext> {
     return {
       metrics: {
         cpuUsagePercent: null,
+        cpuLimitCores: null,
         memoryUsageBytes: null,
         memoryLimitBytes: null,
         processCount: null,
@@ -147,12 +201,26 @@ export async function collectDockerRuntime(): Promise<RuntimeContext> {
 
   const cpuUsageUsec = version === 2 ? readV2CpuUsage() : readV1CpuUsage();
 
+  const cpuLimitCores =
+    version === 2 ? readV2CpuLimitCores() : readV1CpuLimitCores();
+
   const processCount =
     version === 2 ? readV2ProcessCount() : readV1ProcessCount();
 
+  console.log("[docker-runtime] metrics:", {
+    version,
+    cpuUsageUsec,
+    cpuLimitCores,
+    memoryUsage: memory.usage,
+    memoryLimit: memory.limit,
+    processCount,
+  });
+
   return {
     metrics: {
-      cpuUsagePercent: calculateCpuUsagePercent(cpuUsageUsec),
+      cpuUsagePercent: calculateCpuUsagePercent(cpuUsageUsec, cpuLimitCores),
+
+      cpuLimitCores,
 
       memoryUsageBytes: memory.usage,
 

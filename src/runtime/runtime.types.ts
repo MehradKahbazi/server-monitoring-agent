@@ -1,5 +1,6 @@
 export interface RuntimeMetrics {
   cpuUsagePercent: number | null;
+  cpuLimitCores: number | null;
 
   memoryUsageBytes: number | null;
   memoryLimitBytes: number | null;

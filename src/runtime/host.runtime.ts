@@ -15,6 +15,8 @@ export async function collectHostRuntime(): Promise<RuntimeContext> {
         ? cpuLoad.currentLoad
         : null,
 
+      cpuLimitCores: null,
+
       memoryUsageBytes: Number.isFinite(memory.used) ? memory.used : null,
 
       memoryLimitBytes: Number.isFinite(memory.total) ? memory.total : null,
