@@ -1,4 +1,5 @@
 import { config } from "./config/config.js";
+import { getEnvironment } from "./environment/environment.service.js";
 
 import { MonitorService } from "./services/monitor.service.js";
 
@@ -37,6 +38,8 @@ async function bootstrap(): Promise<void> {
       "",
     ].join("\n"),
   );
+
+  console.log("Environment:", getEnvironment());
 }
 
 bootstrap().catch((error) => {

@@ -129,9 +129,46 @@ export class TelegramService {
 }
 
 function formatStatus(metrics: SystemMetrics): string {
-  return [
-    `🖥 <b>${escapeHtml(metrics.hostname)}</b>`,
+  const lines: string[] = [];
 
+  const environment = metrics.environment;
+
+  if (environment.type === "host") {
+    lines.push(`🖥 <b>${escapeHtml(environment.hostname)}</b>`);
+  }
+
+  if (environment.type === "docker") {
+    lines.push(`🐳 <b>Docker</b> — ${escapeHtml(environment.hostname)}`);
+
+    if (environment.containerId) {
+      lines.push(
+        `📦 Container: <code>${escapeHtml(
+          environment.containerId.slice(0, 12),
+        )}</code>`,
+      );
+    }
+  }
+
+  if (environment.type === "kubernetes") {
+    lines.push("☸️ <b>Kubernetes</b>");
+
+    if (environment.podName) {
+      lines.push(`📦 Pod: <code>${escapeHtml(environment.podName)}</code>`);
+    }
+
+    if (environment.namespace) {
+      lines.push(
+        `🏷 Namespace: <code>${escapeHtml(environment.namespace)}</code>`,
+      );
+    }
+
+    if (environment.nodeName) {
+      lines.push(`🖥 Node: <code>${escapeHtml(environment.nodeName)}</code>`);
+    }
+  }
+
+  lines.push(
+    "",
     `⏱ Uptime: ${duration(metrics.uptimeSeconds)}`,
 
     "",
@@ -142,7 +179,11 @@ function formatStatus(metrics: SystemMetrics): string {
 
     `Load: ${metrics.cpu.load.map((value) => value.toFixed(2)).join(" / ")}`,
 
-    `Cores: ${metrics.cpu.cores}`,
+    `Host Cores: ${metrics.cpu.cores}${
+      metrics.cpu.limitCores !== null
+        ? `\nContainer Limit: ${metrics.cpu.limitCores.toFixed(2)}`
+        : ""
+    }`,
 
     `Temperature: ${
       metrics.cpu.temperatureC === null
@@ -166,14 +207,18 @@ function formatStatus(metrics: SystemMetrics): string {
 
     `Usage: <b>${percent(metrics.memory.swapUsagePercent)}</b>`,
 
-    `${bytes(metrics.memory.swapUsedBytes)} / ${bytes(metrics.memory.swapTotalBytes)}`,
+    `${bytes(metrics.memory.swapUsedBytes)} / ${bytes(
+      metrics.memory.swapTotalBytes,
+    )}`,
 
     "",
 
     `⚙️ Processes: ${metrics.processCount}`,
 
     `⏰ ${metrics.collectedAt.toISOString()}`,
-  ].join("\n");
+  );
+
+  return lines.join("\n");
 }
 
 function formatDisk(metrics: SystemMetrics): string {
@@ -204,34 +249,44 @@ function formatHealth(health: HealthSnapshot): string {
   const lines: string[] = ["🏥 <b>Service Health</b>", ""];
 
   if (health.services.length > 0) {
-    lines.push("⚙️ <b>System Services</b>");
+    lines.push("⚙️ <b>Services</b>");
 
     for (const service of health.services) {
-      lines.push(
-        `${service.active ? "🟢" : "🔴"} <b>${escapeHtml(service.name)}</b> — ${escapeHtml(service.state)}`,
-      );
-    }
+      if (service.type === "systemd") {
+        lines.push(
+          `${service.healthy ? "🟢" : "🔴"} ` +
+            `<b>${escapeHtml(service.name)}</b>` +
+            ` — ${escapeHtml(service.systemdState ?? "unknown")}`,
+        );
 
-    lines.push("");
-  }
+        continue;
+      }
 
-  if (health.mysql) {
-    const mysql = health.mysql;
+      if (service.type === "tcp") {
+        const address = `${service.host}:${service.port}`;
 
-    lines.push("🗄️ <b>MySQL</b>");
+        if (service.healthy) {
+          lines.push(
+            `🟢 <b>${escapeHtml(service.name)}</b>` +
+              ` — ${escapeHtml(address)}` +
+              ` (${service.responseTimeMs ?? 0} ms)`,
+          );
+        } else {
+          lines.push(
+            `🔴 <b>${escapeHtml(service.name)}</b>` +
+              ` — ${escapeHtml(address)}`,
+          );
 
-    if (mysql.healthy) {
-      lines.push(
-        `🟢 TCP ${mysql.host}:${mysql.port} — reachable (${mysql.responseTimeMs} ms)`,
-      );
-    } else {
-      lines.push(`🔴 TCP ${mysql.host}:${mysql.port} — unreachable`);
-
-      if (mysql.error) {
-        lines.push(`   Error: ${escapeHtml(mysql.error)}`);
+          if (service.error) {
+            lines.push(`   ${escapeHtml(service.error)}`);
+          }
+        }
       }
     }
 
+    lines.push("");
+  } else {
+    lines.push("ℹ️ No services configured.");
     lines.push("");
   }
 
@@ -241,13 +296,15 @@ function formatHealth(health: HealthSnapshot): string {
     for (const endpoint of health.endpoints) {
       if (endpoint.healthy) {
         lines.push(
-          `🟢 <b>${escapeHtml(endpoint.name)}</b> — ${endpoint.statusCode} (${endpoint.responseTimeMs} ms)`,
+          `🟢 <b>${escapeHtml(endpoint.name)}</b>` +
+            ` — ${endpoint.statusCode}` +
+            ` (${endpoint.responseTimeMs} ms)`,
         );
       } else {
-        lines.push(`🔴 <b>${escapeHtml(endpoint.name)}</b> — unavailable`);
+        lines.push(`🔴 <b>${escapeHtml(endpoint.name)}</b>` + ` — unavailable`);
 
         if (endpoint.error) {
-          lines.push(`   Error: ${escapeHtml(endpoint.error)}`);
+          lines.push(`   ${escapeHtml(endpoint.error)}`);
         }
       }
     }
@@ -274,7 +331,11 @@ function formatAlert(
     "🔥 <b>CPU</b>",
     `Usage: <b>${percent(metrics.cpu.usagePercent)}</b>`,
     `Load: ${metrics.cpu.load.map((value) => value.toFixed(2)).join(" / ")}`,
-    `Cores: ${metrics.cpu.cores}`,
+    `Host Cores: ${metrics.cpu.cores}${
+      metrics.cpu.limitCores !== null
+        ? `\nContainer Limit: ${metrics.cpu.limitCores.toFixed(2)}`
+        : ""
+    }`,
     `Temperature: ${
       metrics.cpu.temperatureC === null
         ? "N/A"
@@ -306,7 +367,9 @@ function formatAlert(
     lines.push("No service checks configured.");
   } else {
     for (const service of health.services) {
-      lines.push(`${service.active ? "✅" : "❌"} ${escapeHtml(service.name)}`);
+      lines.push(
+        `${service.healthy ? "✅" : "❌"} ${escapeHtml(service.name)}`,
+      );
     }
   }
 

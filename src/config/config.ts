@@ -1,6 +1,7 @@
 import "dotenv/config";
-
 import os from "node:os";
+
+import type { ServiceType } from "../types/metrics.js";
 
 function numberEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -33,25 +34,89 @@ export interface EndpointConfig {
   url: string;
 }
 
-const endpoints: EndpointConfig[] = (process.env.ENDPOINTS ?? "")
-  .split(",")
-  .map((item) => item.trim())
-  .filter(Boolean)
-  .map((item) => {
-    const separator = item.indexOf("|");
+export interface ServiceConfig {
+  name: string;
+  type: ServiceType;
 
-    if (separator === -1) {
+  systemdName?: string;
+
+  host?: string;
+  port?: number;
+
+  url?: string;
+}
+
+function parseEndpoints(): EndpointConfig[] {
+  return (process.env.ENDPOINTS ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const separator = item.indexOf("|");
+
+      if (separator === -1) {
+        return {
+          name: item,
+          url: item,
+        };
+      }
+
       return {
-        name: item,
-        url: item,
+        name: item.slice(0, separator).trim(),
+        url: item.slice(separator + 1).trim(),
       };
-    }
+    });
+}
+
+function parseServiceType(value: string | undefined): ServiceType | null {
+  switch (value?.trim().toLowerCase()) {
+    case "systemd":
+      return "systemd";
+
+    case "tcp":
+      return "tcp";
+
+    case "http":
+      return "http";
+
+    default:
+      return null;
+  }
+}
+
+function parseServices(): ServiceConfig[] {
+  const serviceNames = (process.env.SERVICES ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return serviceNames.map((name) => {
+    const key = name.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+
+    const type = parseServiceType(process.env[`SERVICE_${key}_TYPE`]) ?? "tcp";
+
+    const systemdName = process.env[`SERVICE_${key}_SYSTEMD_NAME`]?.trim();
+
+    const host = process.env[`SERVICE_${key}_HOST`]?.trim();
+
+    const portValue = process.env[`SERVICE_${key}_PORT`];
+
+    const port = portValue !== undefined ? Number(portValue) : undefined;
+
+    const url = process.env[`SERVICE_${key}_URL`]?.trim();
 
     return {
-      name: item.slice(0, separator).trim(),
-      url: item.slice(separator + 1).trim(),
+      name,
+      type,
+      ...(systemdName ? { systemdName } : {}),
+      ...(host ? { host } : {}),
+      ...(Number.isInteger(port) ? { port } : {}),
+      ...(url ? { url } : {}),
     };
   });
+}
+
+const services = parseServices();
 
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
@@ -92,7 +157,6 @@ export const config = {
 
   telegram: {
     token: required("TELEGRAM_BOT_TOKEN"),
-
     chatId: required("TELEGRAM_CHAT_ID"),
   },
 
@@ -101,12 +165,11 @@ export const config = {
 
     endpoints: booleanEnv("CHECK_ENDPOINTS", true),
 
-    serviceNames: (process.env.SERVICES ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean),
+    servicesConfig: services,
 
-    endpointConfigs: endpoints,
+    serviceNames: services.map((service) => service.name),
+
+    endpointConfigs: parseEndpoints(),
   },
 
   logLevel: process.env.LOG_LEVEL ?? "info",

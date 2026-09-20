@@ -1,7 +1,10 @@
+import type { EnvironmentContext } from "../environment/environment.types.js";
+
 export interface CpuMetrics {
   usagePercent: number;
   load: [number, number, number];
   cores: number;
+  limitCores: number | null;
   temperatureC: number | null;
 }
 
@@ -10,7 +13,6 @@ export interface MemoryMetrics {
   usedBytes: number;
   availableBytes: number;
   usagePercent: number;
-
   swapTotalBytes: number;
   swapUsedBytes: number;
   swapUsagePercent: number;
@@ -19,53 +21,51 @@ export interface MemoryMetrics {
 export interface DiskMetric {
   filesystem: string;
   mount: string;
-
   totalBytes: number;
   usedBytes: number;
   availableBytes: number;
-
   usagePercent: number;
 }
 
 export interface SystemMetrics {
   hostname: string;
-
   uptimeSeconds: number;
-
   processCount: number;
 
+  environment: EnvironmentContext;
+
   cpu: CpuMetrics;
-
   memory: MemoryMetrics;
-
   disks: DiskMetric[];
 
   collectedAt: Date;
 }
 
+export type ServiceType = "systemd" | "tcp" | "http";
+
 export interface ServiceStatus {
   name: string;
-  active: boolean;
-  state: string;
+  type: ServiceType;
+  healthy: boolean;
+
+  systemdState?: string;
+
+  host?: string;
+  port?: number;
+
+  url?: string;
+  statusCode?: number | null;
+
+  responseTimeMs?: number | null;
+
+  error?: string;
 }
 
 export interface EndpointStatus {
   name: string;
   url: string;
-
   healthy: boolean;
-
   statusCode: number | null;
-
-  responseTimeMs: number | null;
-
-  error?: string;
-}
-
-export interface TcpStatus {
-  host: string;
-  port: number;
-  healthy: boolean;
   responseTimeMs: number | null;
   error?: string;
 }
@@ -73,7 +73,6 @@ export interface TcpStatus {
 export interface HealthSnapshot {
   services: ServiceStatus[];
   endpoints: EndpointStatus[];
-  mysql: TcpStatus | null;
 }
 
 export type AlertMetric =
@@ -86,10 +85,7 @@ export type AlertMetric =
 
 export interface AlertState {
   active: boolean;
-
   consecutiveFailures: number;
-
   lastAlertAt: number;
-
   lastValue: number | null;
 }
