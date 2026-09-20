@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: server-monitor-test
+  namespace: server-monitor-test
+spec:
+  restartPolicy: Never
+
+  containers:
+    - name: server-monitor
+      image: server-monitor:local
+      imagePullPolicy: Never
+
+      env:
+        - name: NODE_ENV
+          value: production
+        - name: TELEGRAM_BOT_TOKEN
+          value: "YOUR_BOT_TOKEN"
+        - name: TELEGRAM_CHAT_ID
+          value: "YOUR_CHAT_ID"
+
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "256Mi"
+        limits:
+          cpu: "1"
+          memory: "512Mi"
